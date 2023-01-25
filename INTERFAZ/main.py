@@ -85,7 +85,7 @@ class MyApp(QMainWindow):
             self.serial.write(data.encode())
     
     def guardar_foto(self):
-        url = "http://192.168.7.186/cam-lo.jpg"
+        url = "http://192.168.9.186/cam-lo.jpg"
         response = requests.get(url)
         img = Image.open(BytesIO(response.content))
 
@@ -113,7 +113,7 @@ class MyApp(QMainWindow):
         
         return general 
     
-    def obtener_angulos(self, Lista, ancho=600, largo=600):
+    def obtener_angulos(self, Lista, ancho=800, largo=800):
         
         for k in range(0,15):
             
@@ -143,12 +143,13 @@ class MyApp(QMainWindow):
         listax=self.obtener_lista()
         listay=self.obtener_angulos(listax)
         listaz=[]
-        
+        print (listay)
         for i in range(len(listay)):
-            angle2=str(listay[i][len(listay)-1])
-            angle1=str(listay[i][len(listay)-2])
+            angle2=str(listay[i][len(listay[i])-1])
+            angle1=str(listay[i][len(listay[i])-2])
             formato = angle1 + ',' + angle2 + '/'
-            listaz.append(formato)            
+            listaz.append(formato)   
+            print(formato)         
         
         lista_a = self.calcularDistancia(listaz)
 
@@ -188,7 +189,7 @@ class MyApp(QMainWindow):
         # ----------- READ THE IMAGE AND PREPROCESSING -----------
         image = cv2.imread("Camara.jpg")
         height, width, _ = image.shape
-        image_resized = cv2.resize(image, (300, 300))
+        image_resized = cv2.resize(image, (400, 400))
 
         # Create a blob
         blob = cv2.dnn.blobFromImage(image_resized, 0.007843, (300, 300), (127.5, 127.5, 127.5))
@@ -317,7 +318,7 @@ class MyApp(QMainWindow):
             cur = connection.cursor()
             cur.execute("SELECT * FROM obstaculos")
             for registro in cur.fetchall():
-                Distancia = registro[0]
+                Distancia = registro[3]
                 distancias.append(Distancia)
             print("Data has been retrieved successfully")
         except Error as error:
