@@ -12,6 +12,8 @@ import requests
 from io import BytesIO
 import cv2
 import numpy as np
+import mysql.connector
+from mysql.connector import Error
 
 class MyApp(QMainWindow):
     def __init__(self):
@@ -44,7 +46,9 @@ class MyApp(QMainWindow):
 
         self.save_photo.clicked.connect(self.guardar_foto)
         self.calculate.clicked.connect(self.enviar_datos)
-        self.procesing.clicked.connect(self.opop)
+        self.procesing.clicked.connect(self.showImage)
+        self.base_datos.clicked.connect(self.upload)
+        self.mostrar_foto.clicked.connect(self.get_image)
 
     def read_ports(self):
         self.baudrates = ['1200', '2400', '4800', '9600', '19200', '38400', '115200']
@@ -98,22 +102,18 @@ class MyApp(QMainWindow):
         
         general=[]
         lista1=[]
-        for i in range(int((len(lista)-1)/12)):
-            for j in range((12*i)+1,(12*i)+2):
-                lista1.append(lista[j])
+        for i in range(int((len(lista)-1)/11)):
+            for j in range((11*i)+2,(11*i)+4):
+                lista1.append(float(lista[j]))
                 
-            for k in range((12*i)+4, (12*i)+5):
+            for k in range((11*i)+8, (11*i)+10):
                 lista1.append(float(lista[k]))
-                
-            for m in range((12*i)+9, (12*i)+11):
-                lista1.append(float(lista[m]))
-                
             general.append(lista1)
             lista1=[]
         
-        return general
+        return general 
     
-    def obtener_angulos(self, Lista, ancho=800, largo=800):
+    def obtener_angulos(self, Lista, ancho=600, largo=600):
         
         for k in range(0,15):
             
@@ -140,34 +140,33 @@ class MyApp(QMainWindow):
         return lista_distancia
 
     def enviar_datos(self):
-        listax=[]
-        listaz=[]
         listax=self.obtener_lista()
-        #listay=[]
-        listax=self.obtener_angulos(listax)
+        listay=self.obtener_angulos(listax)
+        listaz=[]
         
-        for i in range(len(listax)):
-            angle2=str(listax[i][(len(listax[i])-1)])
-            angle1=str(listax[i][(len(listax[i])-2)])
+        for i in range(len(listay)):
+            angle2=str(listay[i][len(listay)-1])
+            angle1=str(listay[i][len(listay)-2])
             formato = angle1 + ',' + angle2 + '/'
             listaz.append(formato)            
         
         lista_a = self.calcularDistancia(listaz)
 
-        for y in range(len(listax)):
-            listax[y].append(lista_a[y])
+        for y in range(len(listay)):
+            listay[y].append(lista_a[y])
 
         #escribiendo en el archivo
         archivo=open("base_datos.txt","w")
-        for i in range(len(listax)):
+        for i in range(len(listay)):
             archivo.write("["+"\n")
             for j in range(0,7):
-                archivo.write(str(listax[i][j])+"\n")
+                archivo.write(str(listay[i][j])+"\n")
             archivo.write("]"+"\n")
-        archivo.close
+        archivo.close  
 
-
-    def opop(self):
+    def showImage(self):
+# ----------- READ DNN MODEL -----------
+# Model architecture
         prototxt = "model/MobileNetSSD_deploy.prototxt.txt"
         # Weights
         model = "model/MobileNetSSD_deploy.caffemodel"
@@ -212,12 +211,11 @@ class MyApp(QMainWindow):
                 
                 rectangle = cv2.rectangle(image, (x, y), (w, h), (0, 255, 0), 2)
                 cv2.putText(image, "Conf: {:.2f}".format(detection[2] * 100), (x, y - 5), 1, 1.2, (255, 0, 0), 2)
-                cv2.putText(image, label, (x, y - 25), 1, 1.2, (255, 0, 0), 2)
+                cv2.putText(image, label, (x, y - 25), 1, 1.2, (255, 0, 0), 2)  #agregar distancia
         
                 detec2=np.append(detection,[cX, cY])
                 archivo=open("arrays.txt","a")
                 archivo.write("["+ "\n")
-                archivo.write(label+"\n")
                 for i in range(len(detec2)):
                     archivo.write(str(detec2[i])+"\n")
                 archivo.write("]"+"\n")
@@ -227,7 +225,153 @@ class MyApp(QMainWindow):
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
+    def upload(self):
+        datos1 = []
+        datos = []
+        archivo = open("base_datos.txt", "r")
+        data = archivo.read()
+        texto = data.replace("[\n", "").replace("\n]", "]").replace("\n", " ").replace("] ", "\n").replace("]", "")
+        archivo.close()
 
+        archivo = open("base_datos2.txt", "w")
+        data = archivo.write(texto)
+        archivo.close()
+
+        archivo = open("base_datos2.txt", "r")
+        lineas = archivo.readlines()
+        for linea in lineas:
+            datos1.append(linea.strip('\n'))
+        for dato in datos1:
+            datos.append(dato.split(" "))
+        for dato in datos:
+            for i in range(len(dato)):
+                if i == 0:
+                    pass
+                else: 
+                    dato[i] = float(dato[i])
+        archivo.close()
+
+        for dato in datos:
+            dato[1] = round(dato[1], 6)
+            dato[2] = round(float(dato[6]), 3)
+            dato[3] = round(float(dato[5]), 2)
+            dato[4] = round(float(dato[4]), 2)
+            dato.pop(6)
+            dato.pop(5)
+            dato = tuple(dato)
+
+        #CREDENCIALES PARA LA CONEXIÓN A MYSQL (CAMBIAR DE ACUERDO A LA COMPU)
+        my_host = "localhost"
+        my_user = "root"
+        my_password = "valiente360"
+        my_database = "db_prueba"
+
+        #SUBIR DATOS A DATABASE
+        try:
+            connection = mysql.connector.connect(
+                host=my_host,
+                user=my_user,
+                passwd=my_password,
+                db=my_database
+                )
+            cur = connection.cursor()
+            sql_1 = "INSERT INTO sensor (marca, modelo) VALUES (%s, %s)"
+            val_1 = ("genérica", "HC-SR04")
+            cur.execute(sql_1, val_1)
+            sql_2 = "INSERT INTO camara (marca, modelo) VALUES (%s, %s)"
+            val_2 = ("genérica", "ESP32-CAM con cámara OV2640")
+            cur.execute(sql_2, val_2)
+            sql_3 = "INSERT INTO arduinoboard (marca, modelo) VALUES (%s, %s)"
+            val_3 = ("genérica", "ARDUINO UNO")
+            cur.execute(sql_3, val_3)
+            sql_4 = "INSERT INTO obstaculos (label, confianza, distancia, angulo_vertical, angulo_horizontal) VALUES (%s, %s, %s, %s, %s)"
+            val_4 = datos
+            cur.executemany(sql_4, val_4)
+            connection.commit()
+            print("Data was uploaded successfully")
+        except Error as error:
+            print("Error loading Obstacles: {}".format(error))
+        finally:
+            if (connection.is_connected()):
+                cur.close()
+                connection.close()
+                print("MySQL connection is closed")
+
+    def get_info(self):
+        #CREDENCIALES DE ACCESO
+        my_host = "localhost"
+        my_user = "root"
+        my_password = "valiente360"
+        my_database = "db_prueba"
+
+        # LISTA VACÍA PARA LAS DISTANCIAS
+        distancias = []
+        
+        try:
+            connection = mysql.connector.connect(
+                host=my_host,
+                user=my_user,
+                passwd=my_password,
+                db=my_database
+                )
+            cur = connection.cursor()
+            cur.execute("SELECT * FROM obstaculos")
+            for registro in cur.fetchall():
+                Distancia = registro[0]
+                distancias.append(Distancia)
+            print("Data has been retrieved successfully")
+        except Error as error:
+            print("Error al ejecutar el procedimiento: {}".format(error))
+        finally:
+            if (connection.is_connected()):
+                cur.close()
+                connection.close()
+                print("MySQL connection is closed")
+
+        #  "distancias" es la lista con las distancias de la base de datos
+        return distancias
+
+    def get_image(self):
+        distancias = self.get_info()
+        general = self.obtener_lista()
+
+        prototxt = "model/MobileNetSSD_deploy.prototxt.txt"
+        model = "model/MobileNetSSD_deploy.caffemodel"
+        # Class labels
+        classes = {0:"background", 1:"airplane", 2:"bicycle",
+                3:"bird", 4:"boat",
+                5:"bottle", 6:"bus",
+                7:"car", 8:"cat",
+                9:"chair", 10:"cow",
+                11:"diningtable", 12:"dog",
+                13:"horse", 14:"motorbike",
+                15:"person", 16:"pottedplant",
+                17:"sheep", 18:"sofa",
+                19:"train", 20:"tvmonitor"}
+
+        # Load the model
+        net = cv2.dnn.readNetFromCaffe(prototxt, model)
+
+        # ----------- READ THE IMAGE AND PREPROCESSING -----------
+        image = cv2.imread("Camara.jpg")
+        height, width, _ = image.shape
+        image_resized = cv2.resize(image, (300, 300))
+
+        blob = cv2.dnn.blobFromImage(image_resized, 0.007843, (300, 300), (127.5, 127.5, 127.5))
+
+        net.setInput(blob)
+        detections = net.forward()
+
+        for i in range(len(general)):
+            cv2.putText(image, f'Objeto:', (int(general[i][2])-20,int(general[i][3])  - 40), 1, 1.1, (57, 255, 20), 2)
+            cv2.putText(image, f'{classes[int(general[i][0])]}', (int(general[i][2])-20,int(general[i][3])  - 20), 1, 1.1, (255, 0, 0), 2)
+            cv2.putText(image,f'Dist:' ,(int(general[i][2])-25, int(general[i][3]) ), 1, 1.1, (57, 255, 20), 2)
+            cv2.putText(image,f'{distancias[i]}' ,(int(general[i][2]+20), int(general[i][3])), 1, 1.1, (255, 0, 0), 2)
+
+        cv2.imshow("Image", image)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+    
     def control_bt_normal(self):
         self.showNormal()
         self.bt_normal.hide()
